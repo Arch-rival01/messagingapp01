@@ -1,0 +1,31 @@
+# Node.js dependencies
+node_modules/
+
+# Build output
+build/
+dist/
+
+# Logs
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Coverage reporting
+coverage/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE/project files
+.vscode/
+.idea/
+
+# OneDrive temporary files
+~$*
