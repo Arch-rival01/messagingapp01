@@ -1,3 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 *{
   margin: 0;
+}
+
+/* Custom Border Draw Button Animation */
+.border-draw-btn {
+  position: relative;
+  background-color: transparent !important;
+  color: #0F172A !important;
+  border: 1px solid #0F172A !important;
+  overflow: visible; /* Need visible so border draws outside */
+  transition: all 0.3s ease;
+}
+
+.border-draw-btn::before,
+.border-draw-btn::after {
+  content: "";
+  position: absolute;
+  width: 0;
+  height: 0;
+  border: 0 solid transparent;
+  box-sizing: border-box;
+  border-radius: inherit; /* match the rounded-md of shadcn button */
+}
+
+/* Top and Right borders */
+.border-draw-btn::before {
+  top: -2px;
+  left: -2px;
+}
+
+/* Bottom and Left borders */
+.border-draw-btn::after {
+  bottom: -2px;
+  right: -2px;
+}
+
+.border-draw-btn:hover {
+  border-color: transparent !important; /* Hide original border on hover */
+  color: #FF6B00 !important; /* Change text color to match border */
+}
+
+.border-draw-btn:hover::before {
+  width: calc(100% + 4px);
+  height: calc(100% + 4px);
+  border-top: 2px solid #FF6B00; /* Neon Orange draw */
+  border-right: 2px solid #FF6B00;
+  transition: width 0.2s ease-out, height 0.2s ease-out 0.2s;
+}
+
+.border-draw-btn:hover::after {
+  width: calc(100% + 4px);
+  height: calc(100% + 4px);
+  border-bottom: 2px solid #FF6B00;
+  border-left: 2px solid #FF6B00;
+  transition: border-color 0s ease-out 0.4s, width 0.2s ease-out 0.4s, height 0.2s ease-out 0.6s;
 }

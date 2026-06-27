@@ -1,69 +1,43 @@
-import './App.css';
 import Sidebar from './components/Sidebar';
 import Chat from './components/Chat';
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { io } from 'socket.io-client';
-import Login from './components/Login';
+import { MinimalAuthPage } from './components/MinimalAuthPage';
 import { useStateValue } from './StateProvider';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 
 // 1. Create socket OUTSIDE the component so it persists across renders
-const socket = io('http://localhost:9000', {
+export const socket = io(process.env.REACT_APP_API_URL || 'http://localhost:9000', {
   transports: ['websocket'],
 });
 
 function App() {
-  const [messages, setMessages] = useState([]);
-  const [{ user }, dispatch] = useStateValue(); // Pull user from Data Layer
-
-  // Fetch initial messages when the app loads
-  useEffect(() => {
-    fetch('http://localhost:9000/messages/sync')
-      .then((response) => response.json())
-      .then((data) => {
-        if (data.success) {
-          setMessages(data.messages);
-        }
-      })
-      .catch((error) => console.error('Error fetching messages:', error));
-  }, []);
+  const [{ user }] = useStateValue(); // Pull user from Data Layer
 
   useEffect(() => {
-    // 2. Attach listeners when component mounts
-    socket.on('connect', () => {
-      console.log('✅ Socket.io CONNECTED! ID:', socket.id);
-    });
-
-    socket.on('inserted', (data) => {
-      console.log('🎉 New message received:', data);
-      setMessages((prevMessages) => [...prevMessages, data]);
-    });
-
-    socket.on('deleted', (deletedId) => {
-      console.log('🗑️ Message deleted:', deletedId);
-      setMessages((prevMessages) => prevMessages.filter((msg) => msg._id !== deletedId));
-    });
-
-    socket.on('disconnect', () => {
-      console.log('❌ Socket.io disconnected');
-    });
-
-    // 3. Cleanup listeners when component unmounts
-    return () => {
-      socket.off('connect');
-      socket.off('inserted');
-      socket.off('deleted');
-      socket.off('disconnect');
-    };
-  }, []);
+    if (user) {
+      socket.emit('setup', user.uid);
+    }
+  }, [user]);
 
   return (
-    <div className="app">
+    <div className="h-screen w-full bg-slate-50 flex overflow-hidden">
       {!user ? (
-        <Login />
+        <MinimalAuthPage />
       ) : (
-        <div className="app__body">
-          <Sidebar />
-          <Chat messages={messages} />
+        <div className="flex h-full w-full max-w-[1920px] mx-auto bg-white shadow-2xl relative overflow-hidden">
+          <BrowserRouter>
+            <Sidebar />
+            <Routes>
+              <Route path="/rooms/:roomId" element={<Chat />} />
+              <Route path="/" element={
+                <div className="flex-1 flex flex-col items-center justify-center bg-slate-50 text-slate-400 font-medium">
+                  <p className="text-xl">Welcome to Messaging App</p>
+                  <p className="text-sm mt-2">Select a room or create a new one to start chatting.</p>
+                </div>
+              } />
+            </Routes>
+          </BrowserRouter>
         </div>
       )}
     </div>

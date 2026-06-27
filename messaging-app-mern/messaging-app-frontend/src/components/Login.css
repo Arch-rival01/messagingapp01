@@ -26,8 +26,10 @@
 .login__container > img {
     object-fit: contain;
     height: 110px;
+    width: 110px;
     margin-bottom: 30px;
-    filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.15));
+    border-radius: 24px; /* Smooth rounded square like an app icon */
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12); /* Shadow works better on rounded edges than filter */
 }
 
 .login__text {
@@ -47,15 +49,56 @@
     font-size: 16px !important;
     font-weight: 600 !important;
     text-transform: inherit !important;
-    background-color: #25D366 !important;
+    background-color: #0F172A !important; /* Sleek Dark Slate */
     color: white !important;
     border-radius: 8px !important;
-    box-shadow: 0 4px 14px rgba(37, 211, 102, 0.4) !important;
-    transition: all 0.2s ease-in-out !important;
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.4) !important;
+    position: relative;
+    border: 3px solid transparent !important; /* Thicker for visibility */
+    transition: all 0.3s ease-in-out !important;
+    overflow: visible !important;
+}
+
+.login__container > button::before,
+.login__container > button::after {
+    content: '';
+    position: absolute;
+    width: 0;
+    height: 0;
+    border: 3px solid transparent;
+    box-sizing: border-box;
+    border-radius: 8px;
+    pointer-events: none;
+}
+
+.login__container > button::before {
+    top: -3px;
+    left: -3px;
+}
+
+.login__container > button::after {
+    bottom: -3px;
+    right: -3px;
 }
 
 .login__container > button:hover {
-    background-color: #128C7E !important;
-    box-shadow: 0 6px 20px rgba(18, 140, 126, 0.5) !important;
+    background-color: #1E293B !important; /* Slightly lighter slate */
+    box-shadow: 0 6px 20px rgba(30, 41, 59, 0.5) !important;
     transform: translateY(-2px) !important;
+}
+
+.login__container > button:hover::before {
+    width: calc(100% + 6px);
+    height: calc(100% + 6px);
+    border-top-color: #FF6B00; /* Vibrant Neon Orange */
+    border-right-color: #FF6B00;
+    transition: width 0.2s ease-out, height 0.2s ease-out 0.2s;
+}
+
+.login__container > button:hover::after {
+    width: calc(100% + 6px);
+    height: calc(100% + 6px);
+    border-bottom-color: #FF6B00;
+    border-left-color: #FF6B00;
+    transition: border-color 0s ease-out 0.4s, width 0.2s ease-out 0.4s, height 0.2s ease-out 0.6s;
 }

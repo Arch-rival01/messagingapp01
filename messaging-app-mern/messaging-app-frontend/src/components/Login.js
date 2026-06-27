@@ -26,8 +26,8 @@ const Login = () => {
         <div className="login">
             <div className="login__container">
                 <img 
-                    src="https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg" 
-                    alt="WhatsApp Logo" 
+                    src="/app_logo.png" 
+                    alt="Messaging App Logo" 
                 />
                 <div className="login__text">
                     <h1>Sign in to Messaging App</h1>

@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import Message from './dbmessages.js';
+import User from './dbUsers.js';
 import dns from 'dns';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
@@ -27,6 +28,9 @@ const io = new Server(httpServer, {
 app.use(express.json());
 app.use(cors());
 
+// State to track online users
+const onlineUsers = new Map(); // socket.id -> uid
+
 // DB config
 const connection_url = process.env.MONGO_URI;
 
@@ -37,11 +41,25 @@ mongoose.connect(connection_url)
     .then(() => console.log('MongoDB connected'))
     .catch((error) => console.error('MongoDB connection error:', error));
 
-// Socket.io connection handler
+// Socket.io connection
 io.on('connection', (socket) => {
-    console.log('🔌 New client connected:', socket.id);
+    console.log(`🔌 New client connected: ${socket.id}`);
+
+    // Track user online status
+    socket.on('setup', (uid) => {
+        onlineUsers.set(socket.id, uid);
+        io.emit('onlineUsers', Array.from(new Set(onlineUsers.values())));
+        console.log(`User ${uid} is online`);
+    });
+
     socket.on('disconnect', () => {
-        console.log('❌ Client disconnected:', socket.id);
+        console.log(`❌ Client disconnected: ${socket.id}`);
+        const uid = onlineUsers.get(socket.id);
+        if (uid) {
+            onlineUsers.delete(socket.id);
+            io.emit('onlineUsers', Array.from(new Set(onlineUsers.values())));
+            console.log(`User ${uid} is offline`);
+        }
     });
 });
 
@@ -62,6 +80,7 @@ app.post('/messages', async (req, res) => {
         io.emit('inserted', {
             sender: data.sender,
             text: data.text,
+            roomId: data.roomId,
             createdAt: data.createdAt,
             _id: data._id,
         });
@@ -81,10 +100,63 @@ app.get('/test-emit', (req, res) => {
     res.json({ connectedSockets });
 });
 
-app.get('/messages/sync', async (req, res) => {
+// User Endpoints
+app.post('/users', async (req, res) => {
     try {
-        const data = await Message.find();
+        const { uid, name, email, photoURL } = req.body;
+        // Upsert user based on uid
+        const user = await User.findOneAndUpdate(
+            { uid },
+            { uid, name, email, photoURL },
+            { new: true, upsert: true }
+        );
+        res.status(200).send(user);
+    } catch (err) {
+        res.status(500).send(err);
+    }
+});
+
+app.get('/users', async (req, res) => {
+    try {
+        const data = await User.find();
+        res.status(200).send(data);
+    } catch (err) {
+        res.status(500).send(err);
+    }
+});
+
+app.get('/messages/:roomId', async (req, res) => {
+    try {
+        const data = await Message.find({ roomId: req.params.roomId });
         res.status(200).json({ success: true, messages: data });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// Get Last Messages for all rooms a user is part of
+app.get('/messages/last/:uid', async (req, res) => {
+    try {
+        const { uid } = req.params;
+        // Find messages where the roomId contains the given uid
+        const lastMessages = await Message.aggregate([
+            { $match: { roomId: { $regex: uid } } },
+            { $sort: { createdAt: -1 } },
+            { 
+                $group: { 
+                    _id: "$roomId", 
+                    lastMessage: { $first: "$$ROOT" } 
+                } 
+            }
+        ]);
+        
+        // Convert to a nice map format { "room_id": "last message text" }
+        const result = {};
+        lastMessages.forEach(item => {
+            result[item._id] = item.lastMessage;
+        });
+
+        res.status(200).json(result);
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
     }
