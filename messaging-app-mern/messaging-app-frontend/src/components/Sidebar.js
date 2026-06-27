@@ -6,13 +6,15 @@ import MoreVertIcon from '@mui/icons-material/MoreVert';
 import { Avatar, IconButton } from '@mui/material';
 import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
 import Sidebarchat from './Sidebarchat';
-
+import { useStateValue } from '../StateProvider';
 
 const Sidebar = () => {
+    const [{ user }, dispatch] = useStateValue();
+    
     return(
         <div className="sidebar">    
         <div className="sidebar__header">
-            <Avatar src="https://i.pravatar.cc/150?img=3" />
+            <Avatar src={user?.photoURL} />
             <div className="sidebar__headerRight">
                 <IconButton>
                     <DonutLargeIcon />
