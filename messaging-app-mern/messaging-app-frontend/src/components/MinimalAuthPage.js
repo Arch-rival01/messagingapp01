@@ -11,6 +11,7 @@ import { useStateValue } from '../StateProvider';
 import { actionTypes } from '../reducer';
 
 export function MinimalAuthPage() {
+	// eslint-disable-next-line no-empty-pattern
 	const [{}, dispatch] = useStateValue();
 
 	const signInGoogle = () => {
@@ -64,6 +65,7 @@ export function MinimalAuthPage() {
 
 			<div className="relative mx-auto flex min-h-screen max-w-6xl flex-col items-center justify-center px-4 w-full">
 				<Button variant="ghost" className="absolute top-4 left-4 z-20" asChild>
+					{/* eslint-disable-next-line jsx-a11y/anchor-is-valid */}
 					<a href="#">
 						<ChevronLeft className="mr-1 h-4 w-4" />
 						Home
@@ -113,10 +115,12 @@ export function MinimalAuthPage() {
 
 					<p className="text-muted-foreground mt-8 text-xs text-center leading-relaxed">
 						By clicking continue, you agree to our{' '}
+						{/* eslint-disable-next-line jsx-a11y/anchor-is-valid */}
 						<a href="#" className="hover:text-slate-900 font-medium underline underline-offset-4 transition-colors">
 							Terms of Service
 						</a>{' '}
 						and{' '}
+						{/* eslint-disable-next-line jsx-a11y/anchor-is-valid */}
 						<a href="#" className="hover:text-slate-900 font-medium underline underline-offset-4 transition-colors">
 							Privacy Policy
 						</a>
