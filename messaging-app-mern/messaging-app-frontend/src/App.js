@@ -31,7 +31,7 @@ function App() {
             <Routes>
               <Route path="/rooms/:roomId" element={<Chat />} />
               <Route path="/" element={
-                <div className="flex-1 flex flex-col items-center justify-center bg-slate-50 text-slate-400 font-medium">
+                <div className="hidden md:flex flex-1 flex-col items-center justify-center bg-slate-50 text-slate-400 font-medium">
                   <p className="text-xl">Welcome to Messaging App</p>
                   <p className="text-sm mt-2">Select a room or create a new one to start chatting.</p>
                 </div>

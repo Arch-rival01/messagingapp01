@@ -149,6 +149,9 @@ app.post('/users', verifyToken, async (req, res) => {
             { uid, name, email, photoURL },
             { new: true, upsert: true }
         );
+        
+        io.emit('newUser', user);
+
         res.status(200).send(user);
     } catch (err) {
         res.status(500).send(err);

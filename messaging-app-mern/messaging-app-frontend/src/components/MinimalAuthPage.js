@@ -13,8 +13,12 @@ import { actionTypes } from '../reducer';
 export function MinimalAuthPage() {
 	// eslint-disable-next-line no-empty-pattern
 	const [{}, dispatch] = useStateValue();
+	const [isLoading, setIsLoading] = React.useState(false);
 
 	const signInGoogle = () => {
+		if (isLoading) return;
+		setIsLoading(true);
+
 		signInWithPopup(auth, provider)
 			.then(async (result) => {
 				try {
@@ -42,7 +46,13 @@ export function MinimalAuthPage() {
 				});
 			})
 			.catch((error) => {
-				alert(error.message);
+				// Ignore internal assertion and popup closed errors which happen if user closes popup or double clicks
+				if (!error.message.includes('INTERNAL ASSERTION FAILED') && error.code !== 'auth/popup-closed-by-user') {
+					alert(error.message);
+				}
+			})
+			.finally(() => {
+				setIsLoading(false);
 			});
 	};
 
@@ -99,9 +109,10 @@ export function MinimalAuthPage() {
 							size="lg" 
 							className="w-full border-draw-btn h-12 text-base font-semibold"
 							onClick={signInGoogle}
+							disabled={isLoading}
 						>
 							<GoogleIcon className="mr-3 h-5 w-5" />
-							Continue with Google
+							{isLoading ? "Signing in..." : "Continue with Google"}
 						</Button>
 						<Button 
 							type="button" 
