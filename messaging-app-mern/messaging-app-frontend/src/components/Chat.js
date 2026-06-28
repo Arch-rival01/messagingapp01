@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Avatar, IconButton } from '@mui/material';
 import { MicRounded, AttachFile, MoreVert, SearchOutlined, InsertEmoticon, SendRounded, ArrowBack, Done, DoneAll } from '@mui/icons-material';
+import DeleteOutlined from '@mui/icons-material/DeleteOutlined';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { socket } from '../App';
 import { useStateValue } from '../StateProvider';
@@ -239,8 +240,8 @@ const Chat = () => {
                                 {message.text}
                                 
                                 {isSender && (
-                                    <span onClick={() => deleteMessage(message._id)} className="absolute -left-10 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-base p-1.5 hover:bg-red-100 text-red-500 rounded-full bg-slate-50 shadow-sm">
-                                        🗑️
+                                    <span onClick={() => deleteMessage(message._id)} className="absolute -left-10 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer flex items-center justify-center p-1.5 hover:bg-red-50 text-slate-400 hover:text-red-500 rounded-full bg-white shadow-sm border border-slate-100">
+                                        <DeleteOutlined fontSize="small" />
                                     </span>
                                 )}
                             </div>
