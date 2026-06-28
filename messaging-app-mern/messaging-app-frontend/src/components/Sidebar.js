@@ -33,13 +33,20 @@ const Sidebar = () => {
                         })
                         .catch(err => console.error(err));
                     
-                    // Fetch last messages
-                    fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:9000'}/messages/last/${user.uid}`, {
+                    // Fetch last messages and unread counts
+                    fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:9000'}/messages/last/${user.uid}?name=${encodeURIComponent(user.displayName || '')}`, {
                         headers: { 'Authorization': `Bearer ${token}` }
                     })
                         .then(res => res.json())
                         .then(data => {
-                            setLastMessages(data);
+                            const initialLastMessages = {};
+                            const initialUnreadCounts = {};
+                            Object.keys(data).forEach(roomId => {
+                                initialLastMessages[roomId] = data[roomId].lastMessage;
+                                initialUnreadCounts[roomId] = data[roomId].unreadCount;
+                            });
+                            setLastMessages(initialLastMessages);
+                            setUnreadCounts(prev => ({ ...initialUnreadCounts, ...prev }));
                         })
                         .catch(err => console.error(err));
                 } catch (error) {
@@ -85,14 +92,23 @@ const Sidebar = () => {
             }
         };
 
+        const handleMessagesRead = ({ roomId, readerName }) => {
+            if (readerName === user?.displayName) {
+                // If I read the messages, clear the count on my side
+                setUnreadCounts(prev => ({ ...prev, [roomId]: 0 }));
+            }
+        };
+
         socket.on('onlineUsers', handleOnlineUsers);
         socket.on('newUser', handleNewUser);
         socket.on('inserted', handleInsertedMessage);
+        socket.on('messagesRead', handleMessagesRead);
 
         return () => {
             socket.off('onlineUsers', handleOnlineUsers);
             socket.off('newUser', handleNewUser);
             socket.off('inserted', handleInsertedMessage);
+            socket.off('messagesRead', handleMessagesRead);
         };
     }, [user, location.pathname]);
 

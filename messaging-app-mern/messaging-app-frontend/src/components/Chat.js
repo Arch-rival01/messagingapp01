@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Avatar, IconButton } from '@mui/material';
-import { MicRounded, AttachFile, MoreVert, SearchOutlined, InsertEmoticon, SendRounded, ArrowBack } from '@mui/icons-material';
+import { MicRounded, AttachFile, MoreVert, SearchOutlined, InsertEmoticon, SendRounded, ArrowBack, Done, DoneAll } from '@mui/icons-material';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { socket } from '../App';
 import { useStateValue } from '../StateProvider';
@@ -18,8 +18,10 @@ const Chat = () => {
     const [{ user }] = useStateValue();
     const [input, setInput] = useState("");
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+    const [isTyping, setIsTyping] = useState(false);
     const messagesEndRef = useRef(null);
     const emojiPickerRef = useRef(null);
+    const typingTimeoutRef = useRef(null);
 
     // Auto-scroll to the bottom whenever messages change
     useEffect(() => {
@@ -73,14 +75,64 @@ const Chat = () => {
             setMessages(prev => prev.filter(msg => msg._id !== deletedId));
         };
 
+        const handleTyping = (data) => {
+            if (data.roomId === roomId && data.uid === targetUser?.uid) {
+                setIsTyping(true);
+            }
+        };
+
+        const handleStopTyping = (data) => {
+            if (data.roomId === roomId && data.uid === targetUser?.uid) {
+                setIsTyping(false);
+            }
+        };
+
+        const handleMessagesRead = ({ roomId: readRoomId, readerName }) => {
+            if (readRoomId === roomId && readerName === targetUser?.name) {
+                setMessages(prev => prev.map(msg => 
+                    msg.sender === user?.displayName ? { ...msg, read: true } : msg
+                ));
+            }
+        };
+
         socket.on('inserted', handleInserted);
         socket.on('deleted', handleDeleted);
+        socket.on('typing', handleTyping);
+        socket.on('stopTyping', handleStopTyping);
+        socket.on('messagesRead', handleMessagesRead);
 
         return () => {
             socket.off('inserted', handleInserted);
             socket.off('deleted', handleDeleted);
+            socket.off('typing', handleTyping);
+            socket.off('stopTyping', handleStopTyping);
+            socket.off('messagesRead', handleMessagesRead);
         };
-    }, [roomId]);
+    }, [roomId, targetUser, user]);
+
+    // Mark messages as read when we open the chat or receive a new message
+    useEffect(() => {
+        const markAsRead = async () => {
+            // Only do this if there are actually unread messages from the other user
+            const hasUnread = messages.some(msg => msg.sender !== user?.displayName && !msg.read);
+            if (!hasUnread || !roomId || !auth.currentUser) return;
+            
+            try {
+                const token = await auth.currentUser.getIdToken();
+                await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:9000'}/messages/read/${roomId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ readerName: user?.displayName })
+                });
+            } catch(e) {
+                console.error(e);
+            }
+        };
+        markAsRead();
+    }, [roomId, messages, user]);
 
     const sendMessage = async (e) => {
         e.preventDefault();
@@ -101,12 +153,25 @@ const Chat = () => {
                     roomId: roomId,
                 })
             });
-
+            socket.emit('stopTyping', { roomId, uid: user.uid });
             setInput(""); 
             setShowEmojiPicker(false); 
         } catch (error) {
             console.error("Error sending message", error);
         }
+    };
+
+    const handleInputChange = (e) => {
+        setInput(e.target.value);
+        if (!auth.currentUser) return;
+
+        socket.emit('typing', { roomId, uid: user.uid });
+        
+        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+        
+        typingTimeoutRef.current = setTimeout(() => {
+            socket.emit('stopTyping', { roomId, uid: user.uid });
+        }, 2000);
     };
 
     const deleteMessage = async (id) => {
@@ -146,7 +211,9 @@ const Chat = () => {
                 <Avatar src={targetUser.photoURL} className="shadow-sm" />
                 <div className="ml-4 flex-1">
                     <h3 className="text-base font-bold text-slate-800 tracking-tight">{targetUser.name}</h3>
-                    <p className="text-[13px] text-slate-500 font-medium">{targetUser.email}</p>
+                    <p className="text-[13px] text-slate-500 font-medium">
+                        {isTyping ? <span className="text-[#00a884] font-semibold italic">typing...</span> : targetUser.email}
+                    </p>
                 </div>
                 <div className="flex space-x-1 hidden sm:flex">
                     <IconButton className="!text-slate-500 hover:!bg-slate-100 transition-colors">
@@ -178,8 +245,17 @@ const Chat = () => {
                                 )}
                             </div>
                             
-                            <span className={`text-[10px] font-medium text-slate-400 mt-1 ${isSender ? "mr-2" : "ml-2"}`}>
+                            <span className={`text-[10px] font-medium text-slate-400 mt-1 flex items-center ${isSender ? "mr-2" : "ml-2"}`}>
                                 {formatTimestamp(message.createdAt)}
+                                {isSender && (
+                                    <span className="ml-1 flex items-center">
+                                        {message.read ? (
+                                            <DoneAll fontSize="inherit" className="text-[#00a884] text-[15px]" />
+                                        ) : (
+                                            <Done fontSize="inherit" className="text-slate-400 text-[15px]" />
+                                        )}
+                                    </span>
+                                )}
                             </span>
                         </div>
                     );
@@ -208,7 +284,7 @@ const Chat = () => {
                     <form className="flex-1 flex items-center mx-2" onSubmit={sendMessage}>
                         <input 
                             value={input} 
-                            onChange={(e) => setInput(e.target.value)} 
+                            onChange={handleInputChange} 
                             type="text" 
                             className="w-full bg-transparent border-none outline-none text-slate-700 placeholder-slate-400 text-[15px]"
                             placeholder="Type a message..." 

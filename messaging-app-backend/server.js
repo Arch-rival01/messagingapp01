@@ -100,6 +100,14 @@ io.on('connection', (socket) => {
             console.log(`User ${uid} is offline`);
         }
     });
+
+    socket.on('typing', ({ roomId, uid }) => {
+        socket.broadcast.emit('typing', { roomId, uid });
+    });
+
+    socket.on('stopTyping', ({ roomId, uid }) => {
+        socket.broadcast.emit('stopTyping', { roomId, uid });
+    });
 });
 
 // API endpoints
@@ -176,10 +184,29 @@ app.get('/messages/:roomId', verifyToken, async (req, res) => {
     }
 });
 
+app.put('/messages/read/:roomId', verifyToken, async (req, res) => {
+    try {
+        const { roomId } = req.params;
+        const { readerName } = req.body;
+
+        await Message.updateMany(
+            { roomId, sender: { $ne: readerName }, read: false },
+            { $set: { read: true } }
+        );
+
+        io.emit('messagesRead', { roomId, readerName });
+        res.status(200).json({ success: true });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 // Get Last Messages for all rooms a user is part of
 app.get('/messages/last/:uid', verifyToken, async (req, res) => {
     try {
         const { uid } = req.params;
+        const { name } = req.query; // Passed from frontend to know who is reading
+        
         // Find messages where the roomId contains the given uid
         const lastMessages = await Message.aggregate([
             { $match: { roomId: { $regex: uid } } },
@@ -187,15 +214,24 @@ app.get('/messages/last/:uid', verifyToken, async (req, res) => {
             { 
                 $group: { 
                     _id: "$roomId", 
-                    lastMessage: { $first: "$$ROOT" } 
+                    lastMessage: { $first: "$$ROOT" },
+                    unreadCount: { 
+                        $sum: { 
+                            $cond: [
+                                { $and: [ { $eq: ["$read", false] }, { $ne: ["$sender", name] } ] }, 
+                                1, 
+                                0
+                            ] 
+                        } 
+                    }
                 } 
             }
         ]);
         
-        // Convert to a nice map format { "room_id": "last message text" }
+        // Convert to a nice map format { "room_id": { lastMessage, unreadCount } }
         const result = {};
         lastMessages.forEach(item => {
-            result[item._id] = item.lastMessage;
+            result[item._id] = { lastMessage: item.lastMessage, unreadCount: item.unreadCount };
         });
 
         res.status(200).json(result);
