@@ -136,9 +136,14 @@ const Chat = () => {
     }, [roomId, messages, user]);
 
     const sendMessage = async (e) => {
-        e.preventDefault();
+        if (e) e.preventDefault();
 
-        if (!input.trim() || !auth.currentUser) return; // Don't send empty messages
+        const messageText = input.trim();
+        if (!messageText || !auth.currentUser) return; // Don't send empty messages
+
+        // Clear input immediately for a snappy UI experience
+        setInput("");
+        setShowEmojiPicker(false);
 
         try {
             const token = await auth.currentUser.getIdToken();
@@ -149,14 +154,12 @@ const Chat = () => {
                     'Authorization': `Bearer ${token}`
                 },
                 body: JSON.stringify({
-                    text: input,
+                    text: messageText,
                     sender: user?.displayName || 'Unknown User', 
                     roomId: roomId,
                 })
             });
             socket.emit('stopTyping', { roomId, uid: user.uid });
-            setInput(""); 
-            setShowEmojiPicker(false); 
         } catch (error) {
             console.error("Error sending message", error);
         }

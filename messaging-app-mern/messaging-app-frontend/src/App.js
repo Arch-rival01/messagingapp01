@@ -21,7 +21,7 @@ function App() {
   }, [user]);
 
   return (
-    <div className="h-screen w-full bg-slate-50 flex overflow-hidden">
+    <div className="fixed top-0 left-0 h-[100dvh] w-full bg-slate-50 flex overflow-hidden">
       {!user ? (
         <MinimalAuthPage />
       ) : (
