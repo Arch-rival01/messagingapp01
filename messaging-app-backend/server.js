@@ -10,8 +10,15 @@ import { Server } from 'socket.io';
 import { initializeApp, cert } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import fs from 'fs';
+import { v2 as cloudinary } from 'cloudinary';
 
 dotenv.config();
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
 // Initialize Firebase Admin
 let serviceAccount;
@@ -46,6 +53,15 @@ const verifyToken = async (req, res, next) => {
     } catch (error) {
         console.error('Error verifying token:', error);
         res.status(401).send('Unauthorized: Invalid token');
+    }
+};
+
+// Admin Middleware
+const verifyAdmin = (req, res, next) => {
+    if (req.user && req.user.email === process.env.ADMIN_EMAIL) {
+        next();
+    } else {
+        res.status(403).send('Forbidden: Admin access required');
     }
 };
 
@@ -114,9 +130,14 @@ io.on('connection', (socket) => {
 app.get('/', (req, res) => res.status(200).send('Hello the webdev'));
 
 app.post('/messages', verifyToken, async (req, res) => {
-    const dbMessage = req.body;
-
     try {
+        // Double check if user is suspended before allowing message
+        const user = await User.findOne({ uid: req.user.uid });
+        if (user && user.isSuspended) {
+            return res.status(403).json({ error: "Your account is suspended." });
+        }
+
+        const dbMessage = req.body;
         const data = await Message.create(dbMessage);
         console.log('Message saved to DB:', data);
 
@@ -127,6 +148,8 @@ app.post('/messages', verifyToken, async (req, res) => {
         io.emit('inserted', {
             sender: data.sender,
             text: data.text,
+            mediaUrl: data.mediaUrl,
+            mediaType: data.mediaType,
             roomId: data.roomId,
             createdAt: data.createdAt,
             _id: data._id,
@@ -136,6 +159,23 @@ app.post('/messages', verifyToken, async (req, res) => {
         res.status(201).send(data);
     } catch (err) {
         res.status(500).send(err);
+    }
+});
+
+app.get('/cloudinary/signature', verifyToken, (req, res) => {
+    try {
+        const timestamp = Math.round(new Date().getTime() / 1000);
+        const signature = cloudinary.utils.api_sign_request(
+            { timestamp },
+            process.env.CLOUDINARY_API_SECRET
+        );
+        res.status(200).json({ 
+            timestamp, 
+            signature, 
+            api_key: process.env.CLOUDINARY_API_KEY 
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
     }
 });
 
@@ -166,12 +206,87 @@ app.post('/users', verifyToken, async (req, res) => {
     }
 });
 
+// Analytics Endpoint
+app.get('/admin/analytics', verifyToken, verifyAdmin, async (req, res) => {
+    try {
+        const totalUsers = await User.countDocuments();
+        const totalMessages = await Message.countDocuments();
+        
+        // Messages sent today
+        const startOfToday = new Date();
+        startOfToday.setHours(0,0,0,0);
+        const messagesToday = await Message.countDocuments({ createdAt: { $gte: startOfToday } });
+        
+        const onlineNow = onlineUsers.size;
+
+        res.status(200).json({ totalUsers, totalMessages, messagesToday, onlineNow });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Suspend/Unsuspend User
+app.post('/admin/users/:uid/suspend', verifyToken, verifyAdmin, async (req, res) => {
+    try {
+        const { uid } = req.params;
+        const user = await User.findOne({ uid });
+        if (!user) return res.status(404).json({ error: "User not found" });
+
+        user.isSuspended = !user.isSuspended;
+        await user.save();
+
+        io.emit('userSuspended', { uid, isSuspended: user.isSuspended });
+        res.status(200).json(user);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Get User Messages (God Eye)
+app.get('/admin/users/:uid/messages', verifyToken, verifyAdmin, async (req, res) => {
+    try {
+        const { uid } = req.params;
+        const user = await User.findOne({ uid });
+        if (!user) return res.status(404).json({ error: "User not found" });
+
+        const messages = await Message.find({ sender: user.name })
+            .sort({ createdAt: -1 })
+            .limit(50);
+            
+        res.status(200).json(messages);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 app.get('/users', verifyToken, async (req, res) => {
     try {
         const data = await User.find();
         res.status(200).send(data);
     } catch (err) {
         res.status(500).send(err);
+    }
+});
+
+app.delete('/users/:uid', verifyToken, verifyAdmin, async (req, res) => {
+    try {
+        const { uid } = req.params;
+        
+        // 1. Delete from MongoDB
+        const deletedUser = await User.findOneAndDelete({ uid });
+        
+        if (!deletedUser) {
+            return res.status(404).json({ success: false, error: "User not found in database" });
+        }
+        
+        // 3. Emit to all clients so they remove the user from sidebar
+        io.emit('userDeleted', uid);
+        
+        console.log(`🗑️ Deleted user: ${uid}`);
+        res.status(200).json({ success: true, message: "User deleted successfully" });
+    } catch (err) {
+        console.error("Error deleting user:", err);
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -240,7 +355,7 @@ app.get('/messages/last/:uid', verifyToken, async (req, res) => {
     }
 });
 
-app.delete('/messages/:id', verifyToken, async (req, res) => {
+app.delete('/messages/:id', verifyToken, verifyAdmin, async (req, res) => {
     try {
         const { id } = req.params;
         const deletedMessage = await Message.findByIdAndDelete(id);

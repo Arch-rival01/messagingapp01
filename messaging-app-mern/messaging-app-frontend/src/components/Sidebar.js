@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Avatar, IconButton } from '@mui/material';
-import { useLocation } from 'react-router-dom';
-import { DonutLarge, Chat as ChatIcon, MoreVert, SearchOutlined } from '@mui/icons-material';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { DonutLarge, Chat as ChatIcon, MoreVert, SearchOutlined, AdminPanelSettings } from '@mui/icons-material';
 import Sidebarchat from './Sidebarchat';
 import { useStateValue } from '../StateProvider';
 import { socket } from '../App';
@@ -15,7 +15,8 @@ const Sidebar = () => {
     const [unreadCounts, setUnreadCounts] = useState({});
     const [searchQuery, setSearchQuery] = useState('');
     const location = useLocation();
-    const isChatRoute = location.pathname.includes('/rooms/');
+    const isContentRoute = location.pathname.includes('/rooms/') || location.pathname.includes('/admin');
+    const navigate = useNavigate();
 
     useEffect(() => {
         const fetchData = async () => {
@@ -99,35 +100,46 @@ const Sidebar = () => {
             }
         };
 
+        const handleUserDeleted = (deletedUid) => {
+            setUsers(prev => prev.filter(u => u.uid !== deletedUid));
+        };
+
         socket.on('onlineUsers', handleOnlineUsers);
         socket.on('newUser', handleNewUser);
         socket.on('inserted', handleInsertedMessage);
         socket.on('messagesRead', handleMessagesRead);
+        socket.on('userDeleted', handleUserDeleted);
 
         return () => {
             socket.off('onlineUsers', handleOnlineUsers);
             socket.off('newUser', handleNewUser);
             socket.off('inserted', handleInsertedMessage);
             socket.off('messagesRead', handleMessagesRead);
+            socket.off('userDeleted', handleUserDeleted);
         };
     }, [user, location.pathname]);
 
     // Clear unread counts when navigating to a room
     useEffect(() => {
-        if (isChatRoute) {
+        if (location.pathname.includes('/rooms/')) {
             const currentRoomId = location.pathname.split('/rooms/')[1];
             if (unreadCounts[currentRoomId]) {
                 setUnreadCounts(prev => ({ ...prev, [currentRoomId]: 0 }));
             }
         }
-    }, [location.pathname, isChatRoute, unreadCounts]);
+    }, [location.pathname, unreadCounts]);
 
     return(
-        <div className={`flex-col w-full md:w-[350px] lg:w-[400px] h-full border-r border-slate-200 bg-white flex-shrink-0 ${isChatRoute ? 'hidden md:flex' : 'flex'}`}>
+        <div className={`flex-col w-full md:w-[350px] lg:w-[400px] h-full border-r border-slate-200 bg-white flex-shrink-0 ${isContentRoute ? 'hidden md:flex' : 'flex'}`}>
             {/* Sidebar Header */}
             <div className="flex justify-between items-center p-4 bg-white/95 backdrop-blur border-b border-slate-100 z-10 sticky top-0">
                 <Avatar src={user?.photoURL} />
                 <div className="flex space-x-1">
+                    {user?.email === process.env.REACT_APP_ADMIN_EMAIL && (
+                        <IconButton onClick={() => navigate('/admin')} className="!text-rose-500 hover:!bg-rose-50 transition-colors" title="Admin Panel">
+                            <AdminPanelSettings />
+                        </IconButton>
+                    )}
                     <IconButton className="!text-slate-500 hover:!bg-slate-100 transition-colors">
                         <DonutLarge />
                     </IconButton>

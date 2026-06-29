@@ -1,5 +1,6 @@
 import Sidebar from './components/Sidebar';
 import Chat from './components/Chat';
+import AdminPanel from './components/AdminPanel';
 import React, { useEffect } from 'react';
 import { io } from 'socket.io-client';
 import { MinimalAuthPage } from './components/MinimalAuthPage';
@@ -30,6 +31,7 @@ function App() {
             <Sidebar />
             <Routes>
               <Route path="/rooms/:roomId" element={<Chat />} />
+              <Route path="/admin" element={<AdminPanel />} />
               <Route path="/" element={
                 <div className="hidden md:flex flex-1 flex-col items-center justify-center bg-slate-50 text-slate-400 font-medium">
                   <p className="text-xl">Welcome to Messaging App</p>

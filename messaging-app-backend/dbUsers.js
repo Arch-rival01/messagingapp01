@@ -14,6 +14,10 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  isSuspended: {
+    type: Boolean,
+    default: false,
+  },
   photoURL: {
     type: String,
   },

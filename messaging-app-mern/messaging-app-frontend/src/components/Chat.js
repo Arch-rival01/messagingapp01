@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Avatar, IconButton } from '@mui/material';
+import { Avatar, IconButton, CircularProgress } from '@mui/material';
 import { MicRounded, AttachFile, MoreVert, SearchOutlined, InsertEmoticon, SendRounded, ArrowBack, Done, DoneAll } from '@mui/icons-material';
 import DeleteOutlined from '@mui/icons-material/DeleteOutlined';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
@@ -20,9 +20,12 @@ const Chat = () => {
     const [input, setInput] = useState("");
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
     const [isTyping, setIsTyping] = useState(false);
+    const [isUploading, setIsUploading] = useState(false);
+    const [isSuspended, setIsSuspended] = useState(false);
     const messagesEndRef = useRef(null);
     const emojiPickerRef = useRef(null);
     const typingTimeoutRef = useRef(null);
+    const fileInputRef = useRef(null);
 
     // Auto-scroll to the bottom whenever messages change
     useEffect(() => {
@@ -96,11 +99,18 @@ const Chat = () => {
             }
         };
 
+        const handleSuspended = (data) => {
+            if (data.uid === user?.uid) {
+                setIsSuspended(data.isSuspended);
+            }
+        };
+
         socket.on('inserted', handleInserted);
         socket.on('deleted', handleDeleted);
         socket.on('typing', handleTyping);
         socket.on('stopTyping', handleStopTyping);
         socket.on('messagesRead', handleMessagesRead);
+        socket.on('userSuspended', handleSuspended);
 
         return () => {
             socket.off('inserted', handleInserted);
@@ -108,6 +118,7 @@ const Chat = () => {
             socket.off('typing', handleTyping);
             socket.off('stopTyping', handleStopTyping);
             socket.off('messagesRead', handleMessagesRead);
+            socket.off('userSuspended', handleSuspended);
         };
     }, [roomId, targetUser, user]);
 
@@ -147,7 +158,7 @@ const Chat = () => {
 
         try {
             const token = await auth.currentUser.getIdToken();
-            await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:9000'}/messages`, {
+            const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:9000'}/messages`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -159,9 +170,81 @@ const Chat = () => {
                     roomId: roomId,
                 })
             });
+
+            if (response.status === 403) {
+                setIsSuspended(true);
+                return;
+            }
+
             socket.emit('stopTyping', { roomId, uid: user.uid });
         } catch (error) {
             console.error("Error sending message", error);
+        }
+    };
+
+    const handleFileUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file || !auth.currentUser) return;
+
+        setIsUploading(true);
+
+        try {
+            const token = await auth.currentUser.getIdToken();
+            
+            // 1. Get Signature from backend
+            const sigRes = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:9000'}/cloudinary/signature`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const sigData = await sigRes.json();
+
+            if (!sigData.signature) {
+                console.error("Failed to get upload signature");
+                setIsUploading(false);
+                return;
+            }
+
+            // 2. Upload to Cloudinary using Signature
+            const formData = new FormData();
+            formData.append("file", file);
+            formData.append("api_key", sigData.api_key);
+            formData.append("timestamp", sigData.timestamp);
+            formData.append("signature", sigData.signature);
+
+            const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/dpz9ux85b/auto/upload`, {
+                method: "POST",
+                body: formData,
+            });
+            const data = await uploadRes.json();
+
+            if (data.secure_url) {
+                const mediaType = data.resource_type === 'video' ? 'video' : 'image';
+                
+                const msgRes = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:9000'}/messages`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        text: "", // Optional text
+                        mediaUrl: data.secure_url,
+                        mediaType: mediaType,
+                        sender: user?.displayName || 'Unknown User', 
+                        roomId: roomId,
+                    })
+                });
+
+                if (msgRes.status === 403) {
+                    setIsSuspended(true);
+                }
+            } else {
+                console.error("Upload failed", data);
+            }
+        } catch (error) {
+            console.error("Error uploading file", error);
+        } finally {
+            setIsUploading(false);
+            e.target.value = null;
         }
     };
 
@@ -240,7 +323,25 @@ const Chat = () => {
                             <div className={`relative group px-4 py-2 sm:px-5 sm:py-2.5 text-[15px] leading-relaxed 
                                 ${isSender ? "bg-[#d9fdd3] text-slate-800 shadow-sm rounded-[18px] rounded-tr-[4px]" : "bg-white text-slate-800 shadow-sm rounded-[18px] rounded-tl-[4px]"}`}>
                                 
-                                {message.text}
+                                {message.mediaUrl && message.mediaType === 'image' && (
+                                    <img 
+                                        src={message.mediaUrl} 
+                                        alt="Uploaded media" 
+                                        className="max-w-[200px] sm:max-w-[300px] rounded-lg mt-1 mb-1 object-cover"
+                                        onContextMenu={(e) => e.preventDefault()}
+                                    />
+                                )}
+                                {message.mediaUrl && message.mediaType === 'video' && (
+                                    <video 
+                                        src={message.mediaUrl} 
+                                        controls 
+                                        controlsList="nodownload"
+                                        disablePictureInPicture
+                                        className="max-w-[200px] sm:max-w-[300px] rounded-lg mt-1 mb-1"
+                                        onContextMenu={(e) => e.preventDefault()}
+                                    />
+                                )}
+                                {message.text && <div>{message.text}</div>}
                                 
                                 {isSender && (
                                     <span onClick={() => deleteMessage(message._id)} className="absolute -left-10 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer flex items-center justify-center p-1.5 hover:bg-red-50 text-slate-400 hover:text-red-500 rounded-full bg-white shadow-sm border border-slate-100">
@@ -277,30 +378,38 @@ const Chat = () => {
                             </div>
                         )}
                         
-                        <IconButton onClick={() => setShowEmojiPicker(!showEmojiPicker)} className="!text-slate-400 hover:!text-slate-600 transition-colors">
+                        <IconButton disabled={isSuspended} onClick={() => setShowEmojiPicker(!showEmojiPicker)} className="!text-slate-400 hover:!text-slate-600 transition-colors">
                             <InsertEmoticon />
                         </IconButton>
                     </div>
-                    <IconButton className="!text-slate-400 hover:!text-slate-600 transition-colors">
-                        <AttachFile />
+                    <input 
+                        type="file" 
+                        accept="image/*,video/*" 
+                        ref={fileInputRef}
+                        onChange={handleFileUpload}
+                        className="hidden"
+                    />
+                    <IconButton onClick={() => fileInputRef.current.click()} disabled={isUploading || isSuspended} className="!text-slate-400 hover:!text-slate-600 transition-colors">
+                        {isUploading ? <CircularProgress size={24} className="!text-[#00a884]" /> : <AttachFile />}
                     </IconButton>
                     
                     <form className="flex-1 flex items-center mx-2" onSubmit={sendMessage}>
                         <input 
                             value={input} 
                             onChange={handleInputChange} 
+                            disabled={isSuspended}
                             type="text" 
-                            className="w-full bg-transparent border-none outline-none text-slate-700 placeholder-slate-400 text-[15px]"
-                            placeholder="Type a message..." 
+                            className={`w-full bg-transparent border-none outline-none text-[15px] ${isSuspended ? 'text-red-500 placeholder-red-400 font-medium' : 'text-slate-700 placeholder-slate-400'}`}
+                            placeholder={isSuspended ? "Your account is suspended." : "Type a message..."} 
                         />
-                        <button type="submit" className="hidden">Send</button>
+                        <button type="submit" className="hidden" disabled={isSuspended}>Send</button>
                     </form>
                     
                     <div className="flex items-center space-x-1 mr-1">
-                        <IconButton className="!text-slate-400 hover:!text-slate-600 transition-colors hidden sm:inline-flex">
+                        <IconButton className="!text-slate-400 hover:!text-slate-600 transition-colors hidden sm:inline-flex" disabled={isSuspended}>
                             <MicRounded />
                         </IconButton>
-                        <IconButton onClick={sendMessage} className="!bg-[#00a884] hover:!bg-[#008f6f] !text-white shadow-md transition-colors !p-2.5">
+                        <IconButton disabled={isSuspended} onClick={sendMessage} className={`transition-colors !p-2.5 shadow-md ${isSuspended ? '!bg-slate-300' : '!bg-[#00a884] hover:!bg-[#008f6f] !text-white'}`}>
                             <SendRounded fontSize="small" />
                         </IconButton>
                     </div>

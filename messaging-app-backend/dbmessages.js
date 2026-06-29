@@ -3,7 +3,15 @@ import mongoose from 'mongoose';
 const messageSchema = new mongoose.Schema({
   text: {
     type: String,
-    required: true,
+    required: false,
+  },
+  mediaUrl: {
+    type: String,
+    required: false,
+  },
+  mediaType: {
+    type: String, // 'image' or 'video'
+    required: false,
   },
   sender: {
     type: String,
