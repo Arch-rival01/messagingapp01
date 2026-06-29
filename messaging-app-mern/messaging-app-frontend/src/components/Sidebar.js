@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { Avatar, IconButton } from '@mui/material';
+import { Avatar, IconButton, Menu, MenuItem } from '@mui/material';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { DonutLarge, Chat as ChatIcon, MoreVert, SearchOutlined, AdminPanelSettings } from '@mui/icons-material';
 import Sidebarchat from './Sidebarchat';
 import { useStateValue } from '../StateProvider';
 import { socket } from '../App';
 import { auth } from '../firebase';
+import { actionTypes } from '../reducer';
 
 const Sidebar = () => {
-    const [{ user }] = useStateValue();
+    const [{ user }, dispatch] = useStateValue();
+    const [anchorEl, setAnchorEl] = useState(null);
     const [users, setUsers] = useState([]);
     const [onlineUsers, setOnlineUsers] = useState([]);
     const [lastMessages, setLastMessages] = useState({});
@@ -119,6 +121,20 @@ const Sidebar = () => {
         };
     }, [user, location.pathname]);
 
+    const handleMenuClick = (event) => {
+        setAnchorEl(event.currentTarget);
+    };
+
+    const handleMenuClose = () => {
+        setAnchorEl(null);
+    };
+
+    const handleLogout = () => {
+        handleMenuClose();
+        auth.signOut();
+        dispatch({ type: actionTypes.SET_USER, user: null });
+    };
+
     // Clear unread counts when navigating to a room
     useEffect(() => {
         if (location.pathname.includes('/rooms/')) {
@@ -146,9 +162,19 @@ const Sidebar = () => {
                     <IconButton className="!text-slate-500 hover:!bg-slate-100 transition-colors">
                         <ChatIcon />
                     </IconButton>
-                    <IconButton className="!text-slate-500 hover:!bg-slate-100 transition-colors">
+                    <IconButton onClick={handleMenuClick} className="!text-slate-500 hover:!bg-slate-100 transition-colors">
                         <MoreVert />
                     </IconButton>
+                    <Menu
+                        anchorEl={anchorEl}
+                        keepMounted
+                        open={Boolean(anchorEl)}
+                        onClose={handleMenuClose}
+                        transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+                        anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+                    >
+                        <MenuItem onClick={handleLogout} className="!text-rose-500 !font-medium">Logout</MenuItem>
+                    </Menu>
                 </div>
             </div>
 

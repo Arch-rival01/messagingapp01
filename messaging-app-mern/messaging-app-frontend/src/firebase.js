@@ -1,5 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
+import { getMessaging } from "firebase/messaging";
 
 // Use environment variables for security so keys aren't committed to source control
 const firebaseConfig = {
@@ -18,5 +19,6 @@ const app = initializeApp(firebaseConfig);
 // Initialize Firebase Authentication and get a reference to the service
 const auth = getAuth(app);
 const provider = new GoogleAuthProvider();
+const messaging = getMessaging(app);
 
-export { auth, provider };
+export { auth, provider, messaging };

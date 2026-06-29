@@ -9,6 +9,7 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import { initializeApp, cert } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
+import { getMessaging } from 'firebase-admin/messaging';
 import fs from 'fs';
 import { v2 as cloudinary } from 'cloudinary';
 
@@ -129,6 +130,24 @@ io.on('connection', (socket) => {
 // API endpoints
 app.get('/', (req, res) => res.status(200).send('Hello the webdev'));
 
+// Register FCM Token for push notifications
+app.post('/users/fcm-token', verifyToken, async (req, res) => {
+    try {
+        const { token } = req.body;
+        if (!token) return res.status(400).json({ error: 'Token required' });
+        
+        await User.findOneAndUpdate(
+            { uid: req.user.uid },
+            { $addToSet: { fcmTokens: token } }, // addToSet prevents duplicate tokens
+            { returnDocument: 'after' }
+        );
+        res.status(200).json({ success: true, message: 'FCM token registered' });
+    } catch (error) {
+        console.error("Error saving FCM token:", error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 app.post('/messages', verifyToken, async (req, res) => {
     try {
         // Double check if user is suspended before allowing message
@@ -140,6 +159,48 @@ app.post('/messages', verifyToken, async (req, res) => {
         const dbMessage = req.body;
         const data = await Message.create(dbMessage);
         console.log('Message saved to DB:', data);
+
+        // --- FCM PUSH NOTIFICATION LOGIC ---
+        try {
+            // roomId is typically formatted as uid1_uid2
+            const uids = data.roomId.split('_');
+            if (uids.length === 2) {
+                const recipientUid = uids.find(id => id !== req.user.uid);
+                if (recipientUid) {
+                    const recipient = await User.findOne({ uid: recipientUid });
+                    if (recipient && recipient.fcmTokens && recipient.fcmTokens.length > 0) {
+                        const messagePayload = {
+                            notification: {
+                                title: `New message from ${data.sender}`,
+                                body: data.text || (data.mediaUrl ? '📷 Sent a media file' : 'New message')
+                            },
+                            tokens: recipient.fcmTokens,
+                        };
+                        
+                        // Send multicast message to all of the recipient's devices
+                        const response = await getMessaging().sendEachForMulticast(messagePayload);
+                        console.log('Successfully sent push notification:', response.successCount, 'messages sent.');
+                        
+                        // Optionally clean up invalid tokens if response.failureCount > 0
+                        if (response.failureCount > 0) {
+                            const failedTokens = [];
+                            response.responses.forEach((resp, idx) => {
+                                if (!resp.success) failedTokens.push(recipient.fcmTokens[idx]);
+                            });
+                            if (failedTokens.length > 0) {
+                                await User.updateOne(
+                                    { uid: recipientUid },
+                                    { $pullAll: { fcmTokens: failedTokens } }
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (fcmError) {
+            console.error('Error sending FCM push notification:', fcmError);
+        }
+        // ------------------------------------
 
         const connectedSockets = [...io.sockets.sockets.keys()];
         console.log('Connected sockets at emit time:', connectedSockets);
